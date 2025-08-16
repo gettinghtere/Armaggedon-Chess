@@ -1,31 +1,16 @@
-# Use Java 17 base image
-FROM openjdk:17-jdk-slim AS build
-
-# Install Maven
-RUN apt-get update && apt-get install -y maven
-
-# Set workdir
+# ---------- Build image ----------
+FROM eclipse-temurin:17-jdk-jammy AS build
 WORKDIR /app
-
-# Copy pom.xml and download dependencies first (better caching)
-COPY pom.xml .
-RUN mvn dependency:go-offline
-
-# Copy project source
+RUN apt-get update && apt-get install -y maven && rm -rf /var/lib/apt/lists/*
+COPY pom.xml ./
+RUN mvn -q -e -DskipTests dependency:go-offline
 COPY src ./src
+RUN mvn -q -e clean package -DskipTests
 
-# Build the application
-RUN mvn clean package -DskipTests
-
-# Runtime image
-FROM openjdk:17-jdk-slim
+# ---------- Runtime image ----------
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
-
-# Copy the built JAR from build stage
-COPY --from=build /app/target/*.jar app.jar
-
-# Expose port
+COPY --from=build /app/target/armaggedonchess-0.0.1-SNAPSHOT.jar /app/app.jar
+ENV JAVA_OPTS=""
 EXPOSE 8080
-
-# Start the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+CMD ["bash", "-lc", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar /app/app.jar"]
